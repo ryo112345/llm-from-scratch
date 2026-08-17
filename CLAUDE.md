@@ -36,9 +36,26 @@ Claude はコーチ役。このファイルと `notes/` と `git log` を見れ�
 
 ## 各単元でやること
 
-### 01_micrograd(Zero to Hero #1)— 実質完了
-スカラー autograd(Value)+ MLP + 学習ループ。PyTorch と勾配一致を検証済み。
-残: 口頭試問(出題例は notes と過去ログ参照: なぜ相手の data を掛ける/なぜ +=/
+### 01_micrograd(Zero to Hero #1)— スカラー autograd 自作【実質完了】
+テーマ: 「forward しながら計算グラフを記録し、逆走して連鎖律で勾配を流す」を
+スカラーで最小実装し、PyTorch が裏でやっていることをブラックボックスでなくす。
+
+- **value.py**: Value クラス(data / grad / _prev / _backward)。演算(+, *, **, tanh)
+  ごとに「forward 計算 + グラフ記録 + 勾配の配り方」をワンセットで実装。
+  backward() はトポロジカルソート → grad=1 → 逆順に _backward 実行
+- **nn.py**: Value を組んで Neuron(tanh(w・x+b)、唯一の計算)→ Layer(同じ入力を
+  n_out 個に配る)→ MLP(隣接サイズペアで直列)。微分コードゼロ行がポイント
+- **train_demo.py**: 4サンプルのおもちゃデータで5拍子
+  (forward → loss → zero_grad → backward → update)×100 step。loss 5.28 → 0.011
+- **test_vs_torch.py**: 同じ式を PyTorch で組み、forward と勾配の一致を検証(一致済み)
+- **experiments.py**: 改造実験6パターンの loss カーブ比較
+  (lr=1.0 / tanh なし / zero_grad なし / b=uniform / b=5.0)。
+  白眉は zero_grad なし: loss 最良に見えて重みが無限成長する silent bug だった
+  (詳細は notes の実験表)
+
+完了条件: 学習ループの各行を説明できる / 勾配が消える停滞(飽和)と発散の違いを
+実験で語れる / += と zero_grad の関係を説明できる — いずれも notes に記録済み。
+**残タスク: 口頭試問のみ**(出題例: なぜ相手の data を掛ける/なぜ +=/
 なぜトポソート/zero_grad を消すとどうなる)
 
 ### 02_makemore(Zero to Hero #2〜#6)— 文字レベル言語モデル入門
