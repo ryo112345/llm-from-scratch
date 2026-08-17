@@ -26,6 +26,14 @@ Claude はコーチ役。このファイルと `notes/` と `git log` を見れ�
 - 「良すぎる結果」が出たら中身を覗く(例: zero_grad なし実験は loss 最良に見えて
   実は重みが無限成長する silent bug だった)
 
+## 単元の進め方の型(全単元共通)
+
+1. 該当動画を観る(ユーザー)→ セッションで実装(AI が書いてよい)
+2. 参照実装や PyTorch と突き合わせて検証(01 の test_vs_torch 方式)
+3. `notes/<単元>.md` に説明を整理 + 前単元からの持ち越し疑問に答えが出たら追記
+4. 改造実験を1変数ずつ回して表に記録(予想→実測→考察)
+5. 口頭試問 → 通ったら commit & push、CLAUDE.md の「現在地」を更新して次へ
+
 ## 各単元でやること
 
 ### 01_micrograd(Zero to Hero #1)— 実質完了
@@ -33,27 +41,49 @@ Claude はコーチ役。このファイルと `notes/` と `git log` を見れ�
 残: 口頭試問(出題例は notes と過去ログ参照: なぜ相手の data を掛ける/なぜ +=/
 なぜトポソート/zero_grad を消すとどうなる)
 
-### 02_makemore(Zero to Hero #2〜#6)
-文字レベル言語モデル入門。names データセットで bigram → MLP → (BatchNorm 等) と段階的に。
-- ここで cross-entropy・sampling・train/dev/test 分割が初登場
-- 01 から持ち越した疑問(notes 末尾)に答えが出るはず: cross-entropy はなぜ/
-  momentum・Adam は何を蓄積している
-- 完了条件: bigram と MLP の性能差を loss で比較して語れる
+### 02_makemore(Zero to Hero #2〜#6)— 文字レベル言語モデル入門
+データ: names.txt(英語の名前 32K 件。makemore リポジトリから取得)。
+タスクは一貫して「前の文字(列)から次の文字を当てる」。動画1本 = サブ単元1個:
 
-### 03_gpt(Zero to Hero #7 "Let's build GPT")
-自作 Transformer。self-attention・位置埋め込み・residual・LayerNorm を1つずつ足す。
-- 動画を止めて自分たち(ユーザー+AI)で先に書く→答え合わせ、の再実装スタイル
+- **02a bigram(動画#2)**: 頻度カウントで作る最小の言語モデル → 同じものを
+  1層 NN + 勾配降下で再現し、両者の loss が一致することを確認。
+  cross-entropy / negative log likelihood と sampling が初登場
+  (01 の持ち越し疑問「なぜ分類は cross-entropy?」の答え合わせ)。
+  実験例: スムージング強度、生成サンプルの質と loss の関係
+- **02b MLP(動画#3)**: 文脈3文字 → 埋め込み → 隠れ層 → 次文字予測(Bengio 2003 の縮小版)。
+  train/dev/test 分割・ミニバッチ・学習率探索・過学習の観察が初登場。
+  実験例: 埋め込み次元 / 文脈長 / 隠れ層サイズを1つずつ変えて dev loss 比較
+- **02c 活性化と BatchNorm(動画#4)**: tanh 飽和・初期化スケール(Kaiming)・BatchNorm。
+  活性化と勾配のヒストグラムで学習を診断する(01 の「loss 以外も観察する」の本格版)
+- **02d backprop ninja(動画#5)**: 02b の MLP の backward を autograd なしで手書きし、
+  PyTorch の勾配と一致させる。01 でやったことのテンソル版
+- **02e WaveNet 風(動画#6)**: 階層的に文脈を広げる。nn.Module 流のコード整理を覚え、
+  03 への橋渡しにする
+
+完了条件: bigram → MLP の loss 改善を表で示せる / cross-entropy を説明できる /
+生成サンプルの質を loss と結びつけて語れる
+
+### 03_gpt(Zero to Hero #7 "Let's build GPT")— 自作 Transformer
+データ: tiny shakespeare(文字レベル)。bigram ベースラインから始めて部品を1つずつ足す:
+self-attention 1ヘッド → multi-head → FFN → ブロック積層 + residual + LayerNorm → スケールアップ。
+
+- 各部品を足すたびに loss がどう動くかを記録する(部品の貢献が見える)
 - 成果物: 「attention とは何か」を非エンジニアに説明する1ページ(公開する)
-- 完了条件: context length・パラメータ数・バッチサイズを変える実験をして語れる
+- 完了条件: context length・パラメータ数・バッチサイズを変える実験をして語れる /
+  「なぜ attention が必要か」を 02 の MLP の限界(固定長文脈)から説明できる
 
-### 04_nanogpt(karpathy/nanoGPT)
-clone してコードを全部読む(「地図化」: モジュール構造・データフロー図を自作)。
-- 改造して日本語コーパス(青空文庫等)でキャラクターレベル→トークンレベル学習
-- tokenizer の役割と日本語のトークン効率問題をここで押さえる
+### 04_nanogpt(karpathy/nanoGPT)— 実物のコードリーディングと日本語学習
+- clone して全ファイルを読む(model.py / train.py / sample.py / configurator.py)。
+  「地図化」: モジュール構造・データフロー図を notes に自作。03 の自作 GPT との差分
+  (実務向けの工夫: AMP・勾配蓄積・checkpoint 再開・torch.compile 等)に注目
+- まず shakespeare-char 設定でローカル(MPS)学習 → 動作確認
+- 次に日本語コーパス(青空文庫等)で: 文字レベル → トークンレベル(BPE)の順に学習。
+  同じテキストの日英トークン数を比較し、日本語のトークン効率問題を数値で押さえる
 - 成果物: コードリーディングノート(構造マップ)+ 学習ログ・生成サンプル付き README
 
-### 05_nanochat(karpathy/nanochat)
-読解のみ。SFT・評価・推論サービングまでの全体像を掴む。
+### 05_nanochat(karpathy/nanochat)— 読解のみ
+学習は回さず、パイプライン全体(tokenizer 学習 → 事前学習 → SFT → 評価 → 推論エンジン → UI)
+の構造マップを作る。「事前学習の先に何があるか」の全体像を掴んで卒業。
 
 ## 環境・コマンド
 
